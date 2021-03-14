@@ -9,10 +9,11 @@ formatters = {
 }
 
 symbol = sys.argv[1]
-testing_start_date = "2020-01-02"
-testing_end_date = "2021-02-24"
-training_end_date = "2020-01-01"
-training_start_date = "2000-01-01"
+print(symbol)
+testing_start_date = "2019-01-01"
+testing_end_date = "2019-05-01"
+training_end_date = "2019-05-01"
+training_start_date = "2019-01-01"
 windows_length = sys.argv[2]
 dimension = sys.argv[3]
 download_data = True

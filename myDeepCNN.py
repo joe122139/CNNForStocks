@@ -24,11 +24,22 @@ import numpy as np
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import classification_report
 from utils import dataset as dataset
+from utils import dataset_traditional as dataset_trad
 import argparse
 
 import time
 from datetime import timedelta
 
+def build_dataset_from_list(data_directory, img_width, symbol_list):
+    X, y, tags = dataset_trad.dataset_list(data_directory, int(img_width),symbol_list)
+    nb_classes = len(tags)
+
+    sample_count = len(y)
+    train_size = sample_count
+    print("train size : {}, tags:{}, x_size:{}".format(train_size,nb_classes,X.shape))
+    feature = X
+    label = np_utils.to_categorical(y, nb_classes)
+    return feature, label, nb_classes
 
 def build_dataset(data_directory, img_width):
     X, y, tags = dataset(data_directory, int(img_width))
@@ -64,7 +75,7 @@ def build_model(SHAPE, nb_classes, bn_axis, seed=None):
     # Step 2 - Pooling
     # Step 2 - Pooling
     x = max_pool_2d(x)
-    #x = Dropout(0.25)(x)
+    x = Dropout(0.25)(x)
 
     # Step 1
     x = Conv2D(64, 3, 3, kernel_initializer='glorot_uniform', padding='same',
@@ -79,7 +90,7 @@ def build_model(SHAPE, nb_classes, bn_axis, seed=None):
 
     # Step 2 - Pooling
     x = max_pool_2d(x)
-    #x = Dropout(0.25)(x)
+    x = Dropout(0.25)(x)
 
     # Step 3 - Flattening
     x = Flatten()(x)
@@ -88,13 +99,20 @@ def build_model(SHAPE, nb_classes, bn_axis, seed=None):
 
     x = Dense(units=256, activation='relu')(x)
     # Dropout
-    #x = Dropout(0.5)(x)
+    x = Dropout(0.5)(x)
 
     x = Dense(units=2, activation='softmax')(x)
 
     model = Model(input_layer, x)
 
     return model
+
+def generate_batch(X_train,Y_train,n_batch):
+    i=0
+    for i in range(0,X_train.shape[0]):
+        yield(X_train[i*n_batch:(i+1)*n_batch].reshape(n_batch,100,100,3), Y_train[i*n_batch:(i+1)*n_batch].reshape(n_batch,2))
+        i+=n_batch
+
 
 
 def main():
@@ -115,6 +133,10 @@ def main():
     #                     help='choose the optimizer (rmsprop, adagrad, adadelta, adam, adamax, nadam)', default="adam")
     parser.add_argument('-o', '--output',
                         help='a result file', type=str, default="hasilnya.txt")
+    parser.add_argument('-l', '--symbolList',
+                        help='a symbol list', type=str, default="symbols.txt")
+    parser.add_argument('-t', '--type',
+                        help='type: symbol or list', type=str, default="symbol")
     args = parser.parse_args()
     # dimensions of our images.
     img_width, img_height = args.dimension, args.dimension
@@ -125,13 +147,22 @@ def main():
     bn_axis = 3 if K.image_data_format() == 'channels_first' else 1
 
     data_directory = args.input
-
-    print("loading dataset")
-    X_train, Y_train, nb_classes = build_dataset(
-        "{}/train".format(data_directory), args.dimension)
-    X_test, Y_test, nb_classes = build_dataset(
-        "{}/test".format(data_directory), args.dimension)
-    print("number of classes : {}".format(nb_classes))
+    nb_classes=""
+    
+    if args.type == 'symbol':
+        print("loading dataset")
+        X_train, Y_train, nb_classes = build_dataset(
+            "{}/train".format(data_directory), args.dimension)
+        X_test, Y_test, nb_classes = build_dataset(
+            "{}/test".format(data_directory), args.dimension)
+        print("number of classes : {}".format(nb_classes))
+    elif args.type == 'list':
+        print("loading dataset list")
+        X_train, Y_train, nb_classes = build_dataset_from_list(
+            "{}/train".format(data_directory), args.dimension, args.symbolList)
+        X_test, Y_test, nb_classes = build_dataset_from_list(
+            "{}/test".format(data_directory), args.dimension, args.symbolList)
+        print("number of classes : {}".format(nb_classes))
 
     model = build_model(SHAPE, nb_classes, bn_axis)
 
@@ -140,15 +171,19 @@ def main():
 
     # Fit the model
     n_features = img_width * img_height * channel
+    print(X_test.shape)
     X_train = X_train.reshape([X_train.shape[0],img_height, img_width,channel])
     X_test = X_test.reshape([X_test.shape[0],img_height, img_width, channel])
     print("x,y shape before fit, x:{}  y:{}".format(X_train.shape, Y_train.shape))
-    model.fit(X_train, Y_train, batch_size=batch_size, epochs=epochs)
+    #model.fit(X_train, Y_train, batch_size=batch_size, epochs=epochs)
+    #model.fit_generator(X_train, Y_train,steps_per_epoch=(X_train.shape[0]//batch_size), epochs=epochs)
+    model.fit_generator(generate_batch(X_train, Y_train,1),steps_per_epoch= (X_train.shape[0]), epochs=epochs)
 
     # Save Model or creates a HDF5 file
     model.save('{}epochs_{}batch_cnn_model_{}.h5'.format(
         epochs, batch_size, data_directory.replace("/", "_")), overwrite=True)
     # del model  # deletes the existing model
+    #predicted = model.predict(X_test)
     predicted = model.predict(X_test)
     y_pred = np.argmax(predicted, axis=1)
     Y_test = np.argmax(Y_test, axis=1)

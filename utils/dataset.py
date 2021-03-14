@@ -10,7 +10,7 @@ import scipy.misc
 
 
 def dataset(base_dir, n):
-    # print("base_dir : {}, n : {}".format(base_dir, n))
+    print("base_dir : {}, n : {}".format(base_dir, n))
     d = defaultdict(list)
     for root, subdirs, files in os.walk(base_dir):
         for filename in files:
